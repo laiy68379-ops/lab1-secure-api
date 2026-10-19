@@ -111,72 +111,63 @@ Safety scans the third-party dependency tree and reports known vulnerabilities f
 
 ---
 
-## 4. CVE-2021-41773 — reproduction, root cause, fix
+## 4. CVE-2019-10743 — reproduction, root cause, fix
 
-Full Docker files live in [`vulhub-cve/`](./vulhub-cve/).
+Full source lives in [`vulhub-cve/`](./vulhub-cve/).
 
 ### 4.1 Summary
 
 | Field | Value |
 |---|---|
-| CVE | CVE-2021-41773 |
-| Product | Apache HTTP Server |
-| Affected | `2.4.49` only |
-| Fixed in | `2.4.50` |
-| CWE | CWE-22 Path Traversal |
-| Impact | Unauthenticated remote file read (and RCE when CGI is enabled) |
+| CVE | CVE-2019-10743 |
+| Product | Go `archive/zip` based extraction (mholt/archiver) |
+| Affected | All versions without path sanitization |
+| Fixed in | Path sanitization added (reject `..` / absolute paths) |
+| CWE | CWE-22 Path Traversal / CWE-23 Relative Path Traversal |
+| Impact | Arbitrary file write outside extraction directory (Zip Slip) |
 
 ### 4.2 Root cause
 
-Apache 2.4.49 introduced a regression in path normalization: when an `Alias`-like
-directive (e.g. `/cgi-bin/`, `/icons/`) is present, a URL containing `/.%2e/`
-segments is not normalized correctly, allowing an attacker to escape the
-aliased directory and read arbitrary files on the filesystem (e.g. `/etc/passwd`).
-When CGI scripts are enabled for the aliased path, the same flaw can be chained
-into remote code execution.
+When extracting a zip archive, the Go standard library `archive/zip` does **not**
+sanitize entry names. If an application directly joins an attacker-controlled
+zip entry name (e.g. `../../tmp/evil.txt`) to the target extraction directory,
+the resulting path escapes the intended folder. This is the classic **Zip Slip**
+pattern: a malicious archive contains entries with `../` segments, and the
+unarchive routine writes them wherever the traversal leads.
 
-### 4.3 Reproduction (vulnerable Apache 2.4.49)
+### 4.3 Reproduction (vulnerable extraction)
 
 ```bash
 cd vulhub-cve
-docker compose -f docker-compose.vuln.yml up --build -d
-
-# PoC: path traversal via /icons/ alias to read /etc/passwd
-curl --path-as-is "http://127.0.0.1:8080/icons/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd"
+docker compose -f docker-compose.vuln.yml up --build
 ```
 
-**Result:** the full `/etc/passwd` file is returned (HTTP 200), confirming the path traversal:
+The Go program builds a malicious zip with entry `../../tmp/evil-pwned.txt`,
+then extracts it to `/tmp/extract` **without** path checking. Result: the file
+is written to `/tmp/evil-pwned.txt`, **outside** the target directory:
 
-![CVE PoC success — reading /etc/passwd](assets/cve-poc-success.png)
+![CVE PoC — Zip Slip writes file outside target dir](assets/cve-poc-success.png)
 
 ### 4.4 Fix
 
-```bash
-docker compose -f docker-compose.vuln.yml down
-docker compose -f docker-compose.fixed.yml up --build -d
-```
-
-Single-line change in `vulhub-cve/Dockerfile.fixed`:
+Single change in `main.go` — reject any entry containing `..` or absolute paths
+before joining:
 
 ```diff
-- FROM httpd:2.4.49
-+ FROM httpd:2.4.50
+  for _, f := range r.File {
++     if strings.Contains(f.Name, "..") || filepath.IsAbs(f.Name) {
++         fmt.Printf("[BLOCKED] traversal entry rejected: %s\n", f.Name)
++         continue
++     }
+      target := filepath.Join("/tmp/extract", f.Name)
 ```
 
-### 4.5 Verification + regression
+### 4.5 Verification
 
-**Re-run the same PoC on the patched Apache 2.4.50:** the request is rejected with `400 Bad Request` and `/etc/passwd` is no longer leaked. The Apache error log records `AH10244: invalid URI path`:
+Re-run the same malicious zip against the patched build. The traversal entry
+is blocked and no file escapes `/tmp/extract`:
 
-![Fixed server returns 400, attack blocked](assets/cve-fixed-400.png)
-
-**Regression test** — normal functionality still works:
-
-```bash
-curl http://127.0.0.1:8080/index.html
-# It works! Apache 2.4.50 (patched, CVE-2021-41773 fixed)
-```
-
-![Regression test — normal page still serves](assets/cve-regression-200.png)
+![Fixed build — traversal entry rejected](assets/cve-fixed-400.png)
 
 
 
@@ -193,8 +184,8 @@ curl http://127.0.0.1:8080/index.html
 5. **Docker/Vulhub vs local install?**
    Isolated, reproducible, disposable environments; no pollution of the host; exact version pinning.
 6. **Vulnerability vs exploit?**
-   A vulnerability is the flaw; an exploit is the code/request that triggers it. CVE-2021-41773 is the vulnerability; the crafted `/.%2e/` curl request is the exploit.
+   A vulnerability is the flaw; an exploit is the code/request that triggers it. CVE-2019-10743 is the vulnerability; the crafted zip entry `../../tmp/evil.txt` is the exploit.
 7. **Why regression testing after a fix?**
-   To confirm the patch did not break legitimate functionality (the default Apache page must still serve).
+   To confirm the patch did not break legitimate functionality (normal zip extraction must still work).
 8. **Why reproduce known CVEs?**
    It builds hands-on intuition for root cause, exploitation preconditions, and patch behaviour — directly transferable to SOC triage and pentesting.

@@ -1,4 +1,5 @@
-FROM httpd:2.4.49
-# Vulnerable Apache 2.4.49 (CVE-2021-41773 path traversal)
-COPY httpd.conf /usr/local/apache2/conf/httpd.conf
-COPY index.html /usr/local/apache2/htdocs/index.html
+FROM golang:1.21
+WORKDIR /app
+COPY main.go .
+RUN go mod init vuln && go build -o vuln-app .
+CMD ["./vuln-app"]

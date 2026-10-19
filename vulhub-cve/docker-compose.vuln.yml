@@ -1,7 +1,5 @@
 services:
-  web:
+  app:
     build:
       context: .
       dockerfile: Dockerfile.vuln
-    ports:
-      - "8080:80"

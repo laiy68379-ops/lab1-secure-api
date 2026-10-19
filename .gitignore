@@ -20,3 +20,6 @@ app.db
 # Report (not submitted to the repo)
 *.docx
 gen_report.py
+
+# Local helper scripts (one-off, not part of the deliverable)
+run-*.ps1
