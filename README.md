@@ -5,32 +5,6 @@
 > CI: GitHub Actions — Bandit (SAST) + Safety (SCA)
 > CVE studied: **CVE-2021-41773** (Apache HTTP Server 2.4.49 path traversal)
 
----
-
-## 0. How to run locally
-
-```bash
-# 1. create & activate a virtualenv
-python -m venv .venv
-# Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# Linux/macOS:
-# source .venv/bin/activate
-
-# 2. install deps
-pip install -r requirements.txt
-
-# 3. start the API (listens on 127.0.0.1:5000, creates app.db on first run)
-python app.py
-```
-
-Seeded demo account:
-
-| username | password |
-|---|---|
-| `alice` | `CorrectHorse9!` |
-
----
 
 ## 1. API endpoints
 
@@ -89,7 +63,7 @@ Response `201`:
 
 ---
 
-## 2. Security controls implemented (2 marks)
+## 2. Security controls implemented
 
 | Threat | Control in `app.py` |
 |---|---|
@@ -100,9 +74,15 @@ Response `201`:
 | **User-enumeration timing attack** | On unknown usernames, a dummy bcrypt check still runs so the response time does not reveal whether the account exists. |
 | **Debugger exposure** | `app.run(..., debug=False)` — the Werkzeug interactive debugger is never enabled. |
 
+### 2.1 Functional test output
+
+Running all endpoints with curl: login (JWT issued) → access `/api/data` without token (401) → access with token (200, existing XSS-escaped item visible) → create a new item (201):
+
+![API functional test — login, 401, 200, create](assets/api-demo.png)
+
 ---
 
-## 3. CI/CD security pipeline (2 marks)
+## 3. CI/CD security pipeline
 
 Config: `.github/workflows/ci.yml`. Triggers: every `push` and `pull_request` to `main`.
 
@@ -155,19 +135,19 @@ aliased directory and read arbitrary files on the filesystem (e.g. `/etc/passwd`
 When CGI scripts are enabled for the aliased path, the same flaw can be chained
 into remote code execution.
 
-### 4.3 Reproduction
+### 4.3 Reproduction (vulnerable Apache 2.4.49)
 
 ```bash
 cd vulhub-cve
 docker compose -f docker-compose.vuln.yml up --build -d
 
-# confirm the server is up
-curl http://127.0.0.1:8080/
-# <html><body><h1>It works!</h1></body></html>
-
-# PoC: path traversal to read /etc/passwd
-curl --path-as-is "http://127.0.0.1:8080/cgi-bin/.%2e/.%2e/.%2e/.%2e/etc/passwd"
+# PoC: path traversal via /icons/ alias to read /etc/passwd
+curl --path-as-is "http://127.0.0.1:8080/icons/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd"
 ```
+
+**Result:** the full `/etc/passwd` file is returned (HTTP 200), confirming the path traversal:
+
+![CVE PoC success — reading /etc/passwd](assets/cve-poc-success.png)
 
 ### 4.4 Fix
 
@@ -185,12 +165,18 @@ Single-line change in `vulhub-cve/Dockerfile.fixed`:
 
 ### 4.5 Verification + regression
 
-- **Re-run the PoC** on the fixed image (Apache 2.4.50) → `404 Not Found`, the traversal path is blocked.
-- **Regression test** — the default page still serves:
-  ```bash
-  curl http://127.0.0.1:8080/
-  # <html><body><h1>It works!</h1></body></html>
-  ```
+**Re-run the same PoC on the patched Apache 2.4.50:** the request is rejected with `400 Bad Request` and `/etc/passwd` is no longer leaked. The Apache error log records `AH10244: invalid URI path`:
+
+![Fixed server returns 400, attack blocked](assets/cve-fixed-400.png)
+
+**Regression test** — normal functionality still works:
+
+```bash
+curl http://127.0.0.1:8080/index.html
+# It works! Apache 2.4.50 (patched, CVE-2021-41773 fixed)
+```
+
+![Regression test — normal page still serves](assets/cve-regression-200.png)
 
 ---
 
@@ -201,7 +187,7 @@ Single-line change in `vulhub-cve/Dockerfile.fixed`:
 - [x] Green GitHub Actions run (Bandit + Safety).
 - [x] `vulhub-cve/` folder with vulnerable + fixed Docker builds.
 - [x] CI screenshots embedded above (Bandit 0 issues, Safety scan, green Actions run).
-- [ ] Screenshots for the formal lab report: CVE PoC output (`/etc/passwd`), fixed PoC returning 404, regression test.
+- [x] CVE screenshots embedded above (PoC reading `/etc/passwd`, fixed server returning 400, regression test 200).
 
 ---
 
