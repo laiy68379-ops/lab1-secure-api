@@ -16,3 +16,8 @@ app.db
 # CI / local artifacts
 .bandit-report.json
 .safety-report.json
+
+# Report (not submitted to the repo)
+*.docx
+gen_report.py
+assets/
