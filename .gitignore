@@ -20,4 +20,3 @@ app.db
 # Report (not submitted to the repo)
 *.docx
 gen_report.py
-assets/
