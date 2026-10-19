@@ -34,14 +34,11 @@ jobs:
       # SCA: scan third-party dependencies for known CVEs
       - name: Run Safety (SCA)
         run: |
-          safety check --file requirements.txt --json -o safety-report.json || true
           safety check --file requirements.txt || true
 
       - name: Upload scan reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
-          path: |
-            bandit-report.json
-            safety-report.json
+          path: bandit-report.json
           if-no-files-found: ignore

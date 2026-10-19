@@ -144,7 +144,11 @@ def login():
         return jsonify({"error": "invalid credentials"}), 401
 
     token = make_token(username)
-    return jsonify({"access_token": token, "token_type": "Bearer", "expires_in": JWT_TTL_MIN * 60})
+    return jsonify({
+        "access_token": token,
+        "token_type": "Bearer",  # nosec B105 - this is the OAuth scheme name, not a credential
+        "expires_in": JWT_TTL_MIN * 60,
+    })
 
 
 @app.route("/api/data", methods=["GET"])
