@@ -1,0 +1,12 @@
+# Fixed build: upgrades Flask to 0.12.3 (the version that patches CVE-2018-1000656)
+# Usage:
+#   docker compose -f docker-compose.fixed.yml up --build -d
+#   # re-run the PoC -> the request is now rejected / no memory blow-up
+#   docker compose -f docker-compose.fixed.yml down
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.fixed
+    ports:
+      - "8000:8000"
