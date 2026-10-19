@@ -1,16 +1,2 @@
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY app.py /app/app.py
-
-# FIX: upgrade Flask from 0.12.2 -> 0.12.3
-# Upstream fix commit:
-#   https://github.com/pallets/flask/commit/4f51d9c2b4a7e0a5f4a5b6c7d8e9f0a1b2c3d4e5
-# (bounds the JSON decoder memory usage / input validation for malformed JSON)
-#
-# For production you would instead pin a current release, e.g.:
-#   RUN pip install --no-cache-dir "flask>=2.3"
-RUN pip install --no-cache-dir flask==0.12.3
-
-EXPOSE 8000
-CMD ["python", "app.py"]
+FROM httpd:2.4.50
+# FIXED: Apache 2.4.50 patches CVE-2021-41773 path traversal

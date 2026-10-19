@@ -1,10 +1,2 @@
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY app.py /app/app.py
-
-# Vulnerable Flask version
-RUN pip install --no-cache-dir flask==0.12.2
-
-EXPOSE 8000
-CMD ["python", "app.py"]
+FROM httpd:2.4.49
+# Vulnerable Apache 2.4.49 (CVE-2021-41773 path traversal)
