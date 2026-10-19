@@ -23,3 +23,11 @@ gen_report.py
 
 # Local helper scripts (one-off, not part of the deliverable)
 run-*.ps1
+
+# CVE scratch artifacts (test payloads, not deliverables)
+vulhub-cve/big.bin
+vulhub-cve/payload.json
+vulhub-cve/payload_utf16.bin
+
+# Outdated screenshot from a previous CVE attempt
+assets/cve-regression-200.png

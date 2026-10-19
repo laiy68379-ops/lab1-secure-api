@@ -3,7 +3,7 @@
 > Course: HDU Cybersecurity Lab · Work 1
 > Stack: Python 3.11+ / Flask 3 / SQLite / JWT / bcrypt
 > CI: GitHub Actions — Bandit (SAST) + Safety (SCA)
-> CVE studied: **CVE-2021-41773** (Apache HTTP Server 2.4.49 path traversal)
+> CVE studied: **CVE-2019-10743** (Go Zip Slip / arbitrary file write during archive extraction)
 
 
 ## 1. API endpoints
