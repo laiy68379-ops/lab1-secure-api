@@ -178,20 +178,9 @@ curl http://127.0.0.1:8080/index.html
 
 ![Regression test — normal page still serves](assets/cve-regression-200.png)
 
----
 
-## 5. Submission checklist
 
-- [x] Public GitHub / GitLab repo containing this folder.
-- [x] This `README.md` (API docs, security controls, CI screenshots, CVE analysis).
-- [x] Green GitHub Actions run (Bandit + Safety).
-- [x] `vulhub-cve/` folder with vulnerable + fixed Docker builds.
-- [x] CI screenshots embedded above (Bandit 0 issues, Safety scan, green Actions run).
-- [x] CVE screenshots embedded above (PoC reading `/etc/passwd`, fixed server returning 400, regression test 200).
-
----
-
-## 6. Answers to control questions
+## 5. Answers to control questions
 
 1. **Why bcrypt over SHA-256 for passwords?**
    bcrypt is deliberately slow and salted, with a tunable work factor; SHA-256 is fast and unsalted, making offline brute-force / rainbow-table attacks trivial.
