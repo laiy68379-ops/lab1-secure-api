@@ -31,11 +31,11 @@ jobs:
           bandit -r app.py -f json -o bandit-report.json || true
           bandit -r app.py -f screen || true
 
-      # SCA: scan third-party dependencies for known CVEs.
-      # The new `scan` command both prints the report and saves it via tee.
+      # SCA: scan third-party dependencies for known CVEs and save a JSON report.
+      # `check` works anonymously in CI; the newer `scan` requires interactive login.
       - name: Run Safety (SCA)
         run: |
-          safety scan --target . 2>&1 | tee safety-report.txt
+          safety check --file requirements.txt --save-json safety-report.json || true
 
       - name: Upload scan reports
         uses: actions/upload-artifact@v4
@@ -43,5 +43,5 @@ jobs:
           name: security-reports
           path: |
             bandit-report.json
-            safety-report.txt
+            safety-report.json
           if-no-files-found: ignore
