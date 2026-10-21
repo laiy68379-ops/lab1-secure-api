@@ -29,6 +29,8 @@ from flask import Flask, request, jsonify, g
 APP_SECRET = os.environ.get("APP_SECRET", "change-me-in-production-please-32b")
 JWT_ALGO = "HS256"
 JWT_TTL_MIN = 30
+# Standard OAuth token-type label (not a credential)
+TOKEN_TYPE_BEARER = "Bearer"  # nosec B105
 DB_PATH = os.path.join(os.path.dirname(__file__), "app.db")
 
 app = Flask(__name__)
@@ -51,7 +53,7 @@ def close_db(_exc):
     if db is not None:
         db.close()
 
-
+#init the database
 def init_db():
     """Create tables and seed one demo user if missing."""
     conn = sqlite3.connect(DB_PATH)
@@ -139,14 +141,14 @@ def login():
     ).fetchone()
 
     # Always run bcrypt to mitigate user-enumeration timing attacks
-    stored_hash = row["pw_hash"] if row else bcrypt.hashpw(b"dummy", bcrypt.gensalt(4))
+    stored_hash = row["pw_hash"] if row else bcrypt.hashpw(b"dummy", bcrypt.gensalt(4))#hash
     if not bcrypt.checkpw(password, stored_hash):
         return jsonify({"error": "invalid credentials"}), 401
 
     token = make_token(username)
     return jsonify({
         "access_token": token,
-        "token_type": "Bearer",  # nosec B105 - this is the OAuth scheme name, not a credential
+        "token_type": TOKEN_TYPE_BEARER,
         "expires_in": JWT_TTL_MIN * 60,
     })
 

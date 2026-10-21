@@ -14,7 +14,7 @@ app.db
 .vscode/
 
 # CI / local artifacts
-.bandit-report.json
+bandit-report.json
 .safety-report.json
 
 # Report (not submitted to the repo)
