@@ -15,6 +15,7 @@ app.db
 
 # CI / local artifacts
 bandit-report.json
+safety-report.txt
 .safety-report.json
 
 # Report (not submitted to the repo)
