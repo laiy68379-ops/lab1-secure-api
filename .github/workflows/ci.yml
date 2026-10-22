@@ -33,9 +33,13 @@ jobs:
 
       # SCA: scan third-party dependencies for known CVEs and save a JSON report.
       # `check` works anonymously in CI; the newer `scan` requires interactive login.
+      # All raw output is suppressed to hide the harmless deprecation/authlib banners;
+      # the JSON report is still saved and a clean one-line summary is printed. If the
+      # scan fails, the JSON file is missing and the python summary step fails loudly.
       - name: Run Safety (SCA)
         run: |
-          safety check --file requirements.txt --save-json safety-report.json || true
+          safety check --file requirements.txt --save-json safety-report.json > /dev/null 2>&1 || true
+          python -c "import json; d=json.load(open('safety-report.json')); m=d['report_meta']; print('Safety SCA ->', m['packages_found'], 'packages scanned,', m['vulnerabilities_found'], 'vulnerabilities,', m['vulnerabilities_ignored'], 'ignored')"
 
       - name: Upload scan reports
         uses: actions/upload-artifact@v4
